@@ -1,0 +1,99 @@
+services:
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    ports:
+      - "8081:8080"
+    environment:
+      SWAGGER_JSON: /app/api.yaml
+    volumes:
+      - ./api_v1_mvp.yaml:/app/api.yaml:ro
+    networks:
+      - app_net
+
+  db:
+    image: postgres:16-alpine
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      app_net:
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    networks:
+      app_net:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9090:9090"
+    env_file:
+      - .env
+    environment:
+      PORT: 9090
+      CONFIG_PATH: ${CONFIG_PATH}
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - app_configs:/usr/local/src/configs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      - ./app
+    networks:
+      app_net:
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - swagger-ui
+      - app
+    networks:
+      - app_net
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_configs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./configs
+
+networks:
+  app_net:
