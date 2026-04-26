@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/lukso-network/variator/internal/domain"
+	"github.com/Cylinder-perhaps/Variator2026/internal/domain"
 )
 
 type PostgresUserRepository struct {
@@ -31,21 +31,23 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, id string) (*domai
 			  FROM users 
 			  WHERE id = $1`
 	user := &domain.User{}
+	var role string
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&user.ID,
 		&user.Email,
 		&user.PasswordHash,
-		&user.Role,
+		&role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("User not found") // No user found, return nil without error
+		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by ID: %w", err)
 	}
+	user.Role = domain.UserRole(role)
 	return user, nil
 }
 

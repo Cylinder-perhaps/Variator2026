@@ -74,17 +74,14 @@ func NewStorage(ctx context.Context, cfg *config.Config) (*Storage, error) {
 	}
 
 	storage := &Storage{
-		db:    db,
-		Users: postgresql.NewPostgresUserRepository(db),
+		db:        db,
+		Users:     postgresql.NewPostgresUserRepository(db),
+		Markets:   postgresql.NewPostgresMarketRepository(db),
+		Balances:  postgresql.NewPostgresBalanceRepository(db),
+		Orders:    postgresql.NewPostgresOrderRepository(db),
+		Positions: postgresql.NewPostgresPositionRepository(db),
+		Trades:    postgresql.NewPostgresTradeRepository(db),
 	}
-
-	// Initialize repositories (будут реализованы в postgresql/ и redis/)
-	// storage.Users = NewPostgresUserRepository(db)
-	// storage.Markets = NewPostgresMarketRepository(db)
-	// storage.Balances = NewPostgresBalanceRepository(db)
-	// storage.Orders = NewPostgresOrderRepository(db)
-	// storage.Positions = NewPostgresPositionRepository(db)
-	// storage.Trades = NewPostgresTradeRepository(db)
 
 	return storage, nil
 }
