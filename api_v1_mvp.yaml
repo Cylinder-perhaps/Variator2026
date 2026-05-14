@@ -1,0 +1,1224 @@
+openapi: 3.0.3
+
+info:
+  title: Variator2026 — API v1 MVP
+  description: |
+    🎯 Prediction Market Platform — Minimum Viable Product (MVP)
+    
+    **Описание:** API для торговли предсказаниями с 13 основными endpoint'ами
+    
+    **13 MVP Endpoint'ов:**
+    1. Register — регистрация пользователя
+    2. Login — вход в систему
+    3. Refresh — обновление JWT токена
+    4. Logout — выход
+    5. List Markets — список рынков
+    6. Get Market — детали рынка
+    7. Create Order — размещение ордера
+    8. Cancel Order — отмена ордера
+    9. Get Orders — мои ордера
+    10. Get Positions — портфель
+    11. Get Balance — баланс счета
+    12. Get Trades — история сделок
+    13. Resolve Market — разрешение исхода (Admin/Moderator)
+    
+  version: "1.0.0"
+  contact:
+    name: Cylindr-Perhaps
+    email: gor.tal@mail.ru
+    url: https://github.com/Cylindr-Perhaps
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8081
+    description: Локальная разработка (через nginx)
+  # - url: https://api.variator.io
+  #   description: Production
+
+tags:
+  - name: Auth
+    description: Аутентификация и авторизация
+  - name: Markets
+    description: Управление рынками и событиями
+  - name: Trading
+    description: Торговля акциями на событиях
+  - name: Portfolio
+    description: Портфель пользователя
+  - name: Admin
+    description: Администраторские операции (Admin/Moderator)
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT токен, выданный при `/api/auth/login`
+        
+        Пример: `Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+        
+        Срок действия:
+        - Access token: 15 минут
+        - Refresh token: 30 дней
+
+  schemas:
+    # ==================== ERROR SCHEMAS ====================
+    
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - UNPROCESSABLE_ENTITY
+                - RATE_LIMITED
+                - INSUFFICIENT_BALANCE
+                - INTERNAL_ERROR
+                - SERVICE_UNAVAILABLE
+            message:
+              type: string
+              description: Описание ошибки на русском
+            details:
+              type: object
+              description: Дополнительные детали ошибки
+              nullable: true
+      example:
+        error:
+          code: INVALID_REQUEST
+          message: "Email должен быть валидным"
+          details:
+            field: "email"
+
+    # ==================== AUTH SCHEMAS ====================
+    
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email пользователя (уникальный)
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Пароль минимум 8 символов
+          example: "SecurePass123!"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          example: "SecurePass123!"
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh токен, полученный при登录
+          example: "refresh_token_abc123def456..."
+
+    AuthResponse:
+      type: object
+      required: [access_token, refresh_token, user]
+      properties:
+        access_token:
+          type: string
+          description: JWT токен (15 мин)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDAiLCJyb2xlIjoidXNlciIsImV4cCI6MTcxMjQxNDQwMH0...."
+        refresh_token:
+          type: string
+          description: Refresh токен (30 дней)
+          example: "refresh_token_550e8400e29b41d4a716446655440000"
+        user:
+          $ref: "#/components/schemas/User"
+
+    RefreshTokenResponse:
+      type: object
+      required: [access_token]
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    User:
+      type: object
+      required: [id, email, role, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        role:
+          type: string
+          enum: [user, moderator, admin]
+          description: Роль пользователя
+          example: "user"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-07T10:30:00Z"
+
+    # ==================== MARKET SCHEMAS ====================
+    
+    Market:
+      type: object
+      required: [id, title, outcomes, status, deadline, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Уникальный ID рынка
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        title:
+          type: string
+          description: Название события
+          example: "Will AGI be created by 2026?"
+        description:
+          type: string
+          nullable: true
+          description: Полное описание события
+          example: "Прогноз на создание искусственного общего интеллекта к концу 2026 года"
+        outcomes:
+          type: array
+          minItems: 2
+          items:
+            type: string
+          description: Возможные исходы события
+          example: ["Yes", "No"]
+        status:
+          type: string
+          enum: [ACTIVE, CLOSED, RESOLVED]
+          description: Статус рынка
+          example: "ACTIVE"
+        deadline:
+          type: string
+          format: date-time
+          description: Deadline окончания торговли
+          example: "2026-12-31T23:59:59Z"
+        resolved_outcome:
+          type: string
+          nullable: true
+          description: Выигравший исход (если RESOLVED)
+          example: "Yes"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-07T10:00:00Z"
+        created_by:
+          type: string
+          format: uuid
+          description: ID администратора, создавшего рынок
+          example: "550e8400-e29b-41d4-a716-446655440002"
+
+    CreateMarketRequest:
+      type: object
+      required: [title, outcomes, deadline]
+      properties:
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+          description: Название события
+          example: "Will AGI be created by 2026?"
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: Полное описание
+        outcomes:
+          type: array
+          minItems: 2
+          maxItems: 10
+          items:
+            type: string
+          description: Возможные исходы
+          example: ["Yes", "No"]
+        deadline:
+          type: string
+          format: date-time
+          description: Deadline торговли (дата в будущем)
+          example: "2026-12-31T23:59:59Z"
+        category:
+          type: string
+          nullable: true
+          description: Категория события
+          example: "Technology"
+
+    # ==================== ORDER SCHEMAS ====================
+    
+    Order:
+      type: object
+      required: [id, market_id, outcome, quantity, price, amount_paid, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        market_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        outcome:
+          type: string
+          example: "Yes"
+        quantity:
+          type: number
+          format: decimal
+          description: Количество акций
+          example: 100
+        price:
+          type: number
+          format: decimal
+          description: Цена за одну акцию
+          example: 0.45
+        amount_paid:
+          type: number
+          format: decimal
+          description: Общая сумма платежа
+          example: 45.00
+        status:
+          type: string
+          enum: [PENDING, FILLED, PARTIALLY_FILLED, CANCELLED]
+          example: "FILLED"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-07T10:15:00Z"
+
+    CreateOrderRequest:
+      type: object
+      required: [market_id, outcome, quantity]
+      properties:
+        market_id:
+          type: string
+          format: uuid
+          description: ID рынка
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        outcome:
+          type: string
+          description: Выбранный исход
+          example: "Yes"
+        quantity:
+          type: number
+          format: decimal
+          minimum: 1
+          description: Количество акций для покупки
+          example: 100
+
+    # ==================== POSITION SCHEMAS ====================
+    
+    Position:
+      type: object
+      required: [market_id, market_title, outcome, quantity, avg_cost, current_value, pnl]
+      properties:
+        market_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        market_title:
+          type: string
+          description: Название события
+          example: "Will AGI be created by 2026?"
+        outcome:
+          type: string
+          description: Ваш исход
+          example: "Yes"
+        quantity:
+          type: number
+          format: decimal
+          description: Количество владеемых акций
+          example: 100
+        avg_cost:
+          type: number
+          format: decimal
+          description: Средняя стоимость покупки
+          example: 0.45
+        current_value:
+          type: number
+          format: decimal
+          description: Текущая стоимость позиции
+          example: 50.00
+        pnl:
+          type: number
+          format: decimal
+          description: Profit/Loss
+          example: 5.00
+
+    PositionsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Position"
+        meta:
+          type: object
+          properties:
+            total_positions:
+              type: integer
+              example: 5
+            total_invested:
+              type: number
+              format: decimal
+              example: 1000.00
+            total_current_value:
+              type: number
+              format: decimal
+              example: 1150.00
+            total_pnl:
+              type: number
+              format: decimal
+              example: 150.00
+
+    # ==================== BALANCE SCHEMAS ====================
+    
+    Balance:
+      type: object
+      required: [total, available, blocked_in_orders]
+      properties:
+        total:
+          type: number
+          format: decimal
+          description: Общий баланс
+          example: 1000.00
+        available:
+          type: number
+          format: decimal
+          description: Доступные средства
+          example: 955.00
+        blocked_in_orders:
+          type: number
+          format: decimal
+          description: Заблокировано в активных ордерах
+          example: 45.00
+
+    # ==================== PAGINATION ====================
+    
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+        total:
+          type: integer
+          example: 150
+        pages:
+          type: integer
+          example: 8
+
+    MarketsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Market"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
+    OrdersResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
+    TradesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              market_id:
+                type: string
+                format: uuid
+              market_title:
+                type: string
+              outcome:
+                type: string
+              quantity:
+                type: number
+                format: decimal
+              price:
+                type: number
+                format: decimal
+              pnl:
+                type: number
+                format: decimal
+              executed_at:
+                type: string
+                format: date-time
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
+    ResolveMarketRequest:
+      type: object
+      required: [winning_outcome]
+      properties:
+        winning_outcome:
+          type: string
+          description: Выигравший исход
+          example: "Yes"
+        evidence_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL с доказательством исхода
+          example: "https://example.com/proof"
+
+    ResolveMarketResponse:
+      type: object
+      properties:
+        market_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [RESOLVED]
+        winning_outcome:
+          type: string
+        total_payout:
+          type: number
+          format: decimal
+          description: Общая выплата победителям
+          example: 5000.00
+        resolved_at:
+          type: string
+          format: date-time
+
+paths:
+  # ==================== 1. AUTH: REGISTER ====================
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerUser
+      summary: Регистрация нового пользователя
+      description: |
+        Создание учетной записи с email и паролем
+        
+        Валидация:
+        - Email должен быть уникальным
+        - Пароль минимум 8 символов
+        - Пароль должен содержать буквы и цифры
+        
+        Роль по умолчанию: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        201:
+          description: Пользователь успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        400:
+          description: Неверные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: INVALID_REQUEST
+                  message: "Email должен быть валидным"
+                  details:
+                    field: "email"
+        409:
+          description: Email уже зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: CONFLICT
+                  message: "Email уже существует в системе"
+        422:
+          description: Поле недопустимо (напр., слабый пароль)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: UNPROCESSABLE_ENTITY
+                  message: "Пароль слишком слабый"
+                  details:
+                    requirement: "Требуется буква, цифра и символ"
+        500:
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 2. AUTH: LOGIN ====================
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginUser
+      summary: Вход в систему
+      description: |
+        Аутентификация по email и пароль
+        
+        Rate limiting: 10 попыток за 15 минут
+        
+        Возвращает:
+        - JWT токен (15 мин)
+        - Refresh токен (30 дней)
+        - Данные пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        200:
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        400:
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: Email или пароль неверны
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: "Email или пароль неверны"
+        429:
+          description: Слишком много попыток входа
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: RATE_LIMITED
+                  message: "Превышен лимит входов (10 за 15 минут)"
+        500:
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 3. AUTH: REFRESH ====================
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      summary: Обновить JWT токен
+      description: |
+        Получить новый JWT при помощи refresh токена
+        
+        Не требует Authorization
+        
+        Возвращает: Новый JWT (15 мин)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      security: []
+      responses:
+        200:
+          description: Токен успешно обновлен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshTokenResponse"
+        401:
+          description: Refresh токен истек или невалиден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: Доступ запрещен (токен отозван)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 4. AUTH: LOGOUT ====================
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutUser
+      summary: Выход из системы
+      description: Инвалидация текущей сессии и refresh токена
+      responses:
+        204:
+          description: Успешный выход
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 5. MARKETS: LIST ====================
+  /api/markets:
+    get:
+      tags: [Markets]
+      operationId: listMarkets
+      summary: Список всех рынков
+      description: |
+        Получить список активных рынков с пагинацией
+        
+        Доступен: Всем (включая гостей)
+        
+        Фильтры: status, sort_by
+      security: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Номер страницы
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Количество рынков на странице
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, CLOSED, RESOLVED]
+          description: Фильтр по статусу
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, deadline, liquidity]
+            default: created_at
+          description: Сортировка
+      responses:
+        200:
+          description: Список рынков успешно получен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketsResponse"
+        400:
+          description: Неверные параметры запроса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        429:
+          description: Превышен лимит запросов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 6. MARKETS: GET DETAILS ====================
+  /api/markets/{marketId}:
+    get:
+      tags: [Markets]
+      operationId: getMarketDetails
+      summary: Детали рынка
+      description: Получить полную информацию о конкретном рынке с исходами и котировками
+      security: []
+      parameters:
+        - name: marketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Уникальный ID рынка
+      responses:
+        200:
+          description: Детали рынка успешно получены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        400:
+          description: Неверный формат UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: Рынок не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 7. TRADING: CREATE ORDER ====================
+  /api/orders:
+    post:
+      tags: [Trading]
+      operationId: createOrder
+      summary: Разместить ордер (купить/продать акцию)
+      description: |
+        Создать новый ордер на покупку или продажу акций события
+        
+        Требует: Аутентификация (Role: user)
+        
+        Проверяет: 
+        - Баланс >= amount_paid
+        - Рынок в статусе ACTIVE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        201:
+          description: Ордер успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        400:
+          description: Неверные параметры ордера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        402:
+          description: Недостаточно средств на счете
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: INSUFFICIENT_BALANCE
+                  message: "Недостаточно средств: нужно 45.00, есть 30.00"
+        404:
+          description: Рынок не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        409:
+          description: Конфликт (напр., рынок закрыт)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        422:
+          description: Невозможно обработать данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Trading]
+      operationId: getMyOrders
+      summary: Мои ордера
+      description: Получить все ордера текущего пользователя
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, FILLED, PARTIALLY_FILLED, CANCELLED]
+      responses:
+        200:
+          description: Список ордеров пользователя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdersResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 8. TRADING: CANCEL ORDER ====================
+  /api/orders/{orderId}:
+    delete:
+      tags: [Trading]
+      operationId: cancelOrder
+      summary: Отменить ордер
+      description: |
+        Отменить незаполненный ордер и вернуть средства
+        
+        Требует: Аутентификация (авторский ордер или Admin)
+        
+        Ограничение: Нельзя отменить уже заполненный ордер (409)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Уникальный ID ордера
+      responses:
+        204:
+          description: Ордер успешно отменен
+        400:
+          description: Неверный формат UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: Доступ запрещен (не ваш ордер)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: Ордер не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        409:
+          description: Конфликт состояния (ордер уже заполнен)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 9. PORTFOLIO: GET POSITIONS ====================
+  /api/positions:
+    get:
+      tags: [Portfolio]
+      operationId: getPositions
+      summary: Мой портфель
+      description: |
+        Получить все текущие позиции пользователя по всем рынкам
+        
+        Включает: quantity, avg_cost, current_value, P&L
+      responses:
+        200:
+          description: Список позиций пользователя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionsResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: Пользователь не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 11. PORTFOLIO: GET BALANCE ====================
+  /api/balance:
+    get:
+      tags: [Portfolio]
+      operationId: getBalance
+      summary: Баланс счета
+      description: |
+        Получить текущий баланс пользователя
+        
+        Включает:
+        - total: Всего (available + blocked)
+        - available: Можно потратить
+        - blocked_in_orders: Заблокировано в активных ордерах
+      responses:
+        200:
+          description: Баланс пользователя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: Аккаунт не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 12. TRADING: GET MY TRADES ====================
+  /api/trades:
+    get:
+      tags: [Trading]
+      operationId: getMyTrades
+      summary: История моих сделок
+      description: Получить все исполненные сделки пользователя (когда его ордер был заполнен)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: market_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Фильтр по рынку
+      responses:
+        200:
+          description: История сделок
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradesResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 13. ADMIN: RESOLVE MARKET ====================
+  /api/admin/markets/{marketId}/resolve:
+    post:
+      tags: [Admin]
+      operationId: resolveMarket
+      summary: Разрешить исход рынка (Admin/Moderator только)
+      description: |
+        Закрыть рынок и определить выигрывающий исход
+        
+        **Требует:** Роль Admin или Moderator
+        
+        **Действия:** 
+        1. Закрывает все открытые ордера
+        2. Вычисляет выигрыши для всех участников
+        3. Зачисляет средства на счета победителей
+      parameters:
+        - name: marketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID рынка
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveMarketRequest"
+      responses:
+        200:
+          description: Рынок успешно разрешен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveMarketResponse"
+        400:
+          description: Неверный исход или параметры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: Только Admin или Moderator могут разрешить
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: "Только Admin и Moderator могут разрешить события"
+        404:
+          description: Рынок не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        409:
+          description: Рынок не может быть разрешен (уже разрешен)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: CONFLICT
+                  message: "Этот рынок уже разрешен"
+        500:
+          description: Внутренняя ошибка при разрешении
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        503:
+          description: Сервис временно недоступен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

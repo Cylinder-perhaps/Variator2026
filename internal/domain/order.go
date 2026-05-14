@@ -2,6 +2,7 @@ package domain
 
 import "time"
 
+// OrderStatus определяет статус ордера.
 type OrderStatus string
 
 const (
@@ -11,15 +12,16 @@ const (
 	OrderStatusCancelled       OrderStatus = "CANCELLED"
 )
 
+// Order представляет ордер пользователя.
 type Order struct {
-	ID         string
-	UserID     string
-	MarketID   string
-	Outcome    string
-	Quantity   float64
-	Price      float64
-	AmountPaid float64
-	Status     OrderStatus
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID         string      `db:"id"`
+	UserID     string      `db:"user_id"`
+	MarketID   string      `db:"market_id"`
+	Outcome    string      `db:"outcome"`
+	Quantity   float64     `db:"quantity"`
+	Price      float64     `db:"price"`
+	AmountPaid float64     `db:"amount_paid"`
+	Status     OrderStatus `db:"status"`
+	CreatedAt  time.Time   `db:"created_at"`
+	UpdatedAt  time.Time   `db:"updated_at"`
 }

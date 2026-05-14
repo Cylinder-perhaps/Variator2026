@@ -2,90 +2,114 @@ package repos
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
-	"github.com/Cylinder-perhaps/Variator2026/internal/config"
 	"github.com/Cylinder-perhaps/Variator2026/internal/domain"
 	"github.com/Cylinder-perhaps/Variator2026/internal/repos/postgresql"
+	"github.com/jmoiron/sqlx"
+
+	// PostgreSQL driver.
+	_ "github.com/lib/pq"
 )
 
+// Storage объединяет все репозитории.
 type Storage struct {
-	db        *sql.DB
-	Users     UserRepository
-	Markets   MarketRepository
-	Balances  BalanceRepository
-	Orders    OrderRepository
-	Positions PositionRepository
-	Trades    TradeRepository
+	db            *sqlx.DB
+	Users         UserRepository
+	Markets       MarketRepository
+	Balances      BalanceRepository
+	Orders        OrderRepository
+	Positions     PositionRepository
+	Trades        TradeRepository
+	RefreshTokens RefreshTokenRepository
 }
 
+// UserRepository описывает методы работы с пользователями.
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
 	GetByID(ctx context.Context, id string) (*domain.User, error)
+	GetByEmail(ctx context.Context, email string) (*domain.User, error)
 	Update(ctx context.Context, user *domain.User) error
 	Delete(ctx context.Context, id string) error
 }
 
+// MarketRepository описывает методы работы с рынками.
 type MarketRepository interface {
 	Create(ctx context.Context, market *domain.Market) error
 	GetByID(ctx context.Context, id string) (*domain.Market, error)
-	GetAll(ctx context.Context) ([]domain.Market, error)
+	List(ctx context.Context, filter domain.MarketFilter) ([]domain.Market, int, error)
 	Update(ctx context.Context, market *domain.Market) error
 }
 
+// BalanceRepository описывает методы работы с балансами.
 type BalanceRepository interface {
 	GetByUserID(ctx context.Context, userID string) (*domain.Balance, error)
-	Update(ctx context.Context, balance *domain.Balance) error
+	UpdateBalance(ctx context.Context, userID string, availableDelta, blockedDelta float64) error
 }
 
+// OrderRepository описывает методы работы с ордерами.
 type OrderRepository interface {
 	Create(ctx context.Context, order *domain.Order) error
 	GetByID(ctx context.Context, id string) (*domain.Order, error)
-	GetByUserID(ctx context.Context, userId string) ([]domain.Order, error)
-	Update(ctx context.Context, order *domain.Order) error
-	Delete(ctx context.Context, id string) error
+	List(ctx context.Context, userID string, filter domain.OrderFilter) ([]domain.Order, int, error)
+	UpdateStatus(ctx context.Context, id string, status domain.OrderStatus) error
+	GetPendingByMarket(ctx context.Context, marketID string) ([]domain.Order, error)
 }
 
+// PositionRepository описывает методы работы с позициями.
 type PositionRepository interface {
 	GetByUserMarketOutcome(ctx context.Context, userID, marketID, outcome string) (*domain.Position, error)
 	GetByUserID(ctx context.Context, userID string) ([]domain.Position, error)
-	Create(ctx context.Context, position *domain.Position) error
-	Update(ctx context.Context, position *domain.Position) error
-	Delete(ctx context.Context, id string) error
+	Upsert(ctx context.Context, position *domain.Position) error
 }
 
+// TradeRepository описывает методы работы с сделками.
 type TradeRepository interface {
 	Create(ctx context.Context, trade *domain.Trade) error
-	GetByUserID(ctx context.Context, userID string) ([]domain.Trade, error)
-	GetByOrderID(ctx context.Context, orderID string) ([]domain.Trade, error)
-	Update(ctx context.Context, trade *domain.Trade) error
-	Delete(ctx context.Context, id string) error
+	List(ctx context.Context, userID string, filter domain.TradeFilter) ([]domain.Trade, int, error)
 }
 
-func NewStorage(ctx context.Context, cfg *config.Config) (*Storage, error) {
-	db, err := sql.Open(cfg.Database.Driver, cfg.Database.ConnectionString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
+// RefreshTokenRepository описывает методы работы с refresh-токенами.
+type RefreshTokenRepository interface {
+	Create(ctx context.Context, token *domain.RefreshToken) error
+	GetByTokenHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
+	RevokeByUserID(ctx context.Context, userID string) error
+	RevokeByTokenHash(ctx context.Context, tokenHash string) error
+}
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+// NewStorage создаёт новое хранилище с подключением к PostgreSQL.
+func NewStorage(dsn string) (*Storage, error) {
+	db, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	storage := &Storage{
-		db:        db,
-		Users:     postgresql.NewPostgresUserRepository(db),
-		Markets:   postgresql.NewPostgresMarketRepository(db),
-		Balances:  postgresql.NewPostgresBalanceRepository(db),
-		Orders:    postgresql.NewPostgresOrderRepository(db),
-		Positions: postgresql.NewPostgresPositionRepository(db),
-		Trades:    postgresql.NewPostgresTradeRepository(db),
+		db:            db,
+		Users:         postgresql.NewUserRepository(db),
+		Markets:       postgresql.NewMarketRepository(db),
+		Balances:      postgresql.NewBalanceRepository(db),
+		Orders:        postgresql.NewOrderRepository(db),
+		Positions:     postgresql.NewPositionRepository(db),
+		Trades:        postgresql.NewTradeRepository(db),
+		RefreshTokens: postgresql.NewRefreshTokenRepository(db),
 	}
 
 	return storage, nil
 }
 
+// ConfigurePool устанавливает параметры пула подключений.
+func (s *Storage) ConfigurePool(maxOpen, maxIdle int) {
+	s.db.SetMaxOpenConns(maxOpen)
+	s.db.SetMaxIdleConns(maxIdle)
+}
+
+// Close закрывает подключение к БД.
 func (s *Storage) Close() error {
 	return s.db.Close()
+}
+
+// DB возвращает *sqlx.DB для случаев, когда нужен прямой доступ (транзакции и т.д.).
+func (s *Storage) DB() *sqlx.DB {
+	return s.db
 }
