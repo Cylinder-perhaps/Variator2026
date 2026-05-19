@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"time"
 )
@@ -32,6 +33,18 @@ func (o *OutcomesJSON) Scan(src interface{}) error {
 	default:
 		return json.Unmarshal(src.([]byte), o)
 	}
+}
+
+// Value реализует интерфейс driver.Valuer для записи JSONB в PostgreSQL.
+func (o OutcomesJSON) Value() (driver.Value, error) {
+	if o == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(o)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 // Market представляет рынок предсказаний.

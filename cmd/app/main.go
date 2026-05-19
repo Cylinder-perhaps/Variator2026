@@ -143,6 +143,7 @@ func main() {
 		r.Route("/api/admin", func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "moderator"))
 
+			r.Post("/markets", appHandler.CreateMarket)
 			r.Post("/markets/{marketId}/resolve", func(w http.ResponseWriter, req *http.Request) {
 				marketID, err := parseUUIDParam(req, "marketId")
 				if err != nil {

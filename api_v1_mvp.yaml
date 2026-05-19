@@ -1136,6 +1136,75 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ==================== 14. ADMIN: CREATE MARKET ====================
+  /api/admin/markets:
+    post:
+      tags: [Admin]
+      operationId: createMarket
+      summary: Создать новый рынок (Admin/Moderator)
+      description: |
+        Создание нового рынка предсказаний.
+
+        **Требования:**
+        - Авторизация: JWT (роль admin или moderator)
+        - Минимум 2 исхода (outcomes)
+        - Deadline в будущем (RFC3339)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, outcomes, deadline]
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                  example: "Кто станет президентом в 2028?"
+                description:
+                  type: string
+                  example: "Рынок на следующие президентские выборы"
+                outcomes:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 2
+                  example: ["Кандидат A", "Кандидат B"]
+                deadline:
+                  type: string
+                  format: date-time
+                  example: "2028-11-06T00:00:00Z"
+                category:
+                  type: string
+                  example: "politics"
+      responses:
+        "201":
+          description: Рынок создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Market"
+        "400":
+          description: Невалидный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ==================== 13. ADMIN: RESOLVE MARKET ====================
   /api/admin/markets/{marketId}/resolve:
     post:

@@ -185,6 +185,66 @@ func (h *App) LogoutUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// --- 4.5. Create Market (Admin) ---
+
+// CreateMarketRequest — запрос на создание рынка.
+type CreateMarketRequest struct {
+	Title       string   `json:"title"`
+	Description *string  `json:"description,omitempty"`
+	Outcomes    []string `json:"outcomes"`
+	Deadline    string   `json:"deadline"`
+	Category    *string  `json:"category,omitempty"`
+}
+
+func (h *App) CreateMarket(w http.ResponseWriter, r *http.Request) {
+	userID := mw.GetUserID(r.Context())
+	if userID == "" {
+		respondError(w, http.StatusUnauthorized, api.UNAUTHORIZED, "Не авторизован")
+		return
+	}
+
+	role := mw.GetUserRole(r.Context())
+	if role != "admin" && role != "moderator" {
+		respondError(w, http.StatusForbidden, api.FORBIDDEN, "Только Admin и Moderator могут создавать рынки")
+		return
+	}
+
+	var req CreateMarketRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, "Неверный формат запроса")
+		return
+	}
+
+	if req.Title == "" {
+		respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, "Поле title обязательно")
+		return
+	}
+	if len(req.Outcomes) < 2 {
+		respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, "Необходимо минимум 2 исхода")
+		return
+	}
+
+	deadline, err := time.Parse(time.RFC3339, req.Deadline)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, "Deadline должен быть в формате RFC3339 (например 2026-12-31T23:59:59Z)")
+		return
+	}
+
+	if deadline.Before(time.Now()) {
+		respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, "Deadline должен быть в будущем")
+		return
+	}
+
+	market, err := h.Markets.CreateMarket(r.Context(), req.Title, req.Description, req.Outcomes, deadline, req.Category, userID)
+	if err != nil {
+		log.Printf("ERROR CreateMarket: %v", err)
+		respondError(w, http.StatusInternalServerError, api.INTERNALERROR, "Внутренняя ошибка сервера")
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, toAPIMarket(*market))
+}
+
 // --- 5. List Markets ---
 
 func (h *App) ListMarkets(w http.ResponseWriter, r *http.Request, params api.ListMarketsParams) {

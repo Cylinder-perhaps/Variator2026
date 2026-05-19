@@ -35,15 +35,15 @@ generate:
 	oapi-codegen -config oapi-codegen.yaml api_v1_mvp.yaml
 
 # ==================== SEED (тестовые данные) ====================
-# seed:
-# 	@echo "Наполнение базы данных тестовыми данными"
-# 	go run ./cmd/seed/main.go
+seed:
+	@echo "🌱 Наполнение базы данных и тестирование"
+	./scripts/seed_and_test.sh
 
 # ==================== LINT ====================
-# lint:
-# 	@echo "Запуск линтера golangci-lint"
-# 	golangci-lint run ./...
+lint:
+	@echo "🔍 Запуск линтера"
+	go vet ./...
 
 # ==================== TEST ====================
-# test:
-# 	go test -v -race -count=1 ./...
+test:
+	go test -v -race -count=1 ./...
