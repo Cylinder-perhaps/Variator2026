@@ -231,6 +231,15 @@ components:
           nullable: true
           description: Выигравший исход (если RESOLVED)
           example: "Yes"
+        pools:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          description: Общая сумма денег (ставок) на каждый исход.
+          example:
+            "Yes": 150.50
+            "No": 50.00
         created_at:
           type: string
           format: date-time

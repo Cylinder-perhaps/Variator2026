@@ -61,15 +61,27 @@ func (s *MarketService) ListMarkets(ctx context.Context, status *string, sortBy 
 		return nil, 0, fmt.Errorf("failed to list markets: %w", err)
 	}
 
+	for i := range markets {
+		pools, err := s.positions.GetPoolsByMarketID(ctx, markets[i].ID)
+		if err == nil && len(pools) > 0 {
+			markets[i].Pools = pools
+		}
+	}
+
 	return markets, total, nil
 }
 
 // GetMarketDetails возвращает детали рынка по ID.
-func (s *MarketService) GetMarketDetails(ctx context.Context, id string) (*domain.Market, error) {
 	market, err := s.markets.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+
+	pools, err := s.positions.GetPoolsByMarketID(ctx, market.ID)
+	if err == nil && len(pools) > 0 {
+		market.Pools = pools
+	}
+
 	return market, nil
 }
 
@@ -144,7 +156,7 @@ func (s *MarketService) ResolveMarket(ctx context.Context, marketID, winningOutc
 		return nil, 0, fmt.Errorf("failed to update market: %w", err)
 	}
 
-	// Начисление выигрышей по позициям.
+	// Начисление выигрышей по пулам (Parimutuel System)
 	totalPayout := 0.0
 
 	positions, err := s.positions.GetByMarketID(ctx, marketID)
@@ -152,10 +164,32 @@ func (s *MarketService) ResolveMarket(ctx context.Context, marketID, winningOutc
 		return nil, 0, fmt.Errorf("failed to get positions for payout: %w", err)
 	}
 
+	totalPool := 0.0
+	winningPool := 0.0
+
 	for _, pos := range positions {
+		investment := pos.Quantity * pos.AvgCost
+		totalPool += investment
 		if pos.Outcome == winningOutcome {
-			// Выплата = количество акций * 1.0
-			payout := pos.Quantity * 1.0
+			winningPool += investment
+		}
+	}
+
+	for _, pos := range positions {
+		investment := pos.Quantity * pos.AvgCost
+
+		var payout float64
+		if winningPool == 0 {
+			// Refund: никто не угадал, возвращаем деньги всем участникам
+			payout = investment
+		} else if pos.Outcome == winningOutcome {
+			// Выплата = (Ставка пользователя / Пул победителей) * Общий Пул
+			payout = (investment / winningPool) * totalPool
+		} else {
+			payout = 0
+		}
+
+		if payout > 0 {
 			if err := s.balances.UpdateBalance(ctx, pos.UserID, payout, 0); err != nil {
 				// В реальной системе здесь должна быть транзакционность
 				return nil, 0, fmt.Errorf("failed to process payout for user %s: %w", pos.UserID, err)

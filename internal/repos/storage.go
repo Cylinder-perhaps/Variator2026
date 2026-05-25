@@ -65,6 +65,7 @@ type PositionRepository interface {
 	GetByUserMarketOutcome(ctx context.Context, userID, marketID, outcome string) (*domain.Position, error)
 	GetByUserID(ctx context.Context, userID string) ([]domain.Position, error)
 	GetByMarketID(ctx context.Context, marketID string) ([]domain.Position, error)
+	GetPoolsByMarketID(ctx context.Context, marketID string) (map[string]float64, error)
 	Upsert(ctx context.Context, position *domain.Position) error
 }
 

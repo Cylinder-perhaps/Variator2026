@@ -80,6 +80,32 @@ func (r *PositionRepository) GetByMarketID(ctx context.Context, marketID string)
 	return positions, nil
 }
 
+// GetPoolsByMarketID возвращает суммы ставок на каждый исход.
+func (r *PositionRepository) GetPoolsByMarketID(ctx context.Context, marketID string) (map[string]float64, error) {
+	query := `SELECT outcome, SUM(quantity * avg_cost) as pool
+			  FROM positions
+			  WHERE market_id = $1 AND quantity > 0
+			  GROUP BY outcome`
+
+	rows, err := r.db.QueryContext(ctx, query, marketID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pools: %w", err)
+	}
+	defer rows.Close()
+
+	pools := make(map[string]float64)
+	for rows.Next() {
+		var outcome string
+		var pool float64
+		if err := rows.Scan(&outcome, &pool); err != nil {
+			return nil, fmt.Errorf("failed to scan pool row: %w", err)
+		}
+		pools[outcome] = pool
+	}
+
+	return pools, nil
+}
+
 // Upsert создаёт или обновляет позицию (INSERT ... ON CONFLICT UPDATE).
 func (r *PositionRepository) Upsert(ctx context.Context, position *domain.Position) error {
 	query := `INSERT INTO positions (id, user_id, market_id, outcome, quantity, avg_cost)

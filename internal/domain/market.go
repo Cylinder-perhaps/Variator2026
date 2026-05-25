@@ -61,6 +61,7 @@ type Market struct {
 	CreatedBy       *string      `db:"created_by"`
 	ExternalID      *string      `db:"external_id"`
 	ExternalSource  *string      `db:"external_source"`
-	CreatedAt       time.Time    `db:"created_at"`
-	UpdatedAt       time.Time    `db:"updated_at"`
+	CreatedAt       time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time          `db:"updated_at" json:"updated_at"`
+	Pools           map[string]float64 `db:"-" json:"pools,omitempty"` // Наполняется динамически на уровне сервиса
 }
