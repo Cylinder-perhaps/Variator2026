@@ -144,9 +144,25 @@ func (s *MarketService) ResolveMarket(ctx context.Context, marketID, winningOutc
 		return nil, 0, fmt.Errorf("failed to update market: %w", err)
 	}
 
-	// Здесь можно добавить логику начисления выигрышей по позициям.
-	// Для MVP просто отмечаем рынок как resolved.
+	// Начисление выигрышей по позициям.
 	totalPayout := 0.0
+
+	positions, err := s.positions.GetByMarketID(ctx, marketID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get positions for payout: %w", err)
+	}
+
+	for _, pos := range positions {
+		if pos.Outcome == winningOutcome {
+			// Выплата = количество акций * 1.0
+			payout := pos.Quantity * 1.0
+			if err := s.balances.UpdateBalance(ctx, pos.UserID, payout, 0); err != nil {
+				// В реальной системе здесь должна быть транзакционность
+				return nil, 0, fmt.Errorf("failed to process payout for user %s: %w", pos.UserID, err)
+			}
+			totalPayout += payout
+		}
+	}
 
 	return market, totalPayout, nil
 }
