@@ -15,6 +15,7 @@ import (
 	mw "github.com/Cylinder-perhaps/Variator2026/internal/middleware"
 	"github.com/Cylinder-perhaps/Variator2026/internal/repos"
 	"github.com/Cylinder-perhaps/Variator2026/internal/services"
+	"github.com/Cylinder-perhaps/Variator2026/internal/worker"
 	"github.com/Cylinder-perhaps/Variator2026/pkg/api"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -155,6 +156,11 @@ func main() {
 		})
 	})
 
+	// --- Polymarket Sync Worker ---
+	polySyncer := worker.NewPolymarketSync(storage.Markets, marketService)
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	go polySyncer.Start(workerCtx)
+
 	// --- HTTP Server ---
 	port := strconv.Itoa(cfg.Server.Port)
 	srv := &http.Server{
@@ -181,6 +187,9 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
+
+	workerCancel()
+	log.Println("⏳ Polymarket worker stopped")
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("❌ Server shutdown failed: %v", err)

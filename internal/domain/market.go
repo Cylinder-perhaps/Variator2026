@@ -59,6 +59,8 @@ type Market struct {
 	ResolvedOutcome *string      `db:"resolved_outcome"`
 	EvidenceURL     *string      `db:"evidence_url"`
 	CreatedBy       *string      `db:"created_by"`
+	ExternalID      *string      `db:"external_id"`
+	ExternalSource  *string      `db:"external_source"`
 	CreatedAt       time.Time    `db:"created_at"`
 	UpdatedAt       time.Time    `db:"updated_at"`
 }

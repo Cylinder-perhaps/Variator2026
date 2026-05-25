@@ -23,14 +23,15 @@ func NewMarketRepository(db *sqlx.DB) *MarketRepository {
 
 // Create создаёт новый рынок.
 func (r *MarketRepository) Create(ctx context.Context, market *domain.Market) error {
-	query := `INSERT INTO markets (id, title, description, outcomes, status, category, deadline, created_by)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	query := `INSERT INTO markets (id, title, description, outcomes, status, category, deadline, created_by, external_id, external_source)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			  RETURNING created_at, updated_at`
 
 	err := r.db.QueryRowxContext(ctx, query,
 		market.ID, market.Title, market.Description,
 		market.Outcomes, string(market.Status),
 		market.Category, market.Deadline, market.CreatedBy,
+		market.ExternalID, market.ExternalSource,
 	).Scan(&market.CreatedAt, &market.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create market: %w", err)
@@ -45,7 +46,7 @@ func (r *MarketRepository) GetByID(ctx context.Context, id string) (*domain.Mark
 
 	query := `SELECT id, title, description, outcomes, status, category,
 	                 deadline, resolved_outcome, evidence_url, created_by,
-	                 created_at, updated_at
+	                 external_id, external_source, created_at, updated_at
 			  FROM markets
 			  WHERE id = $1`
 
@@ -126,13 +127,15 @@ func (r *MarketRepository) List(ctx context.Context, filter domain.MarketFilter)
 func (r *MarketRepository) Update(ctx context.Context, market *domain.Market) error {
 	query := `UPDATE markets
 			  SET title = $1, description = $2, outcomes = $3, status = $4,
-			      category = $5, deadline = $6, resolved_outcome = $7, evidence_url = $8
-			  WHERE id = $9`
+			      category = $5, deadline = $6, resolved_outcome = $7, evidence_url = $8,
+			      external_id = $9, external_source = $10, updated_at = now()
+			  WHERE id = $11`
 
 	result, err := r.db.ExecContext(ctx, query,
 		market.Title, market.Description, market.Outcomes,
 		string(market.Status), market.Category, market.Deadline,
-		market.ResolvedOutcome, market.EvidenceURL, market.ID,
+		market.ResolvedOutcome, market.EvidenceURL,
+		market.ExternalID, market.ExternalSource, market.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update market: %w", err)
@@ -147,4 +150,43 @@ func (r *MarketRepository) Update(ctx context.Context, market *domain.Market) er
 	}
 
 	return nil
+}
+
+// GetByExternalID возвращает рынок по внешнему ID и источнику.
+func (r *MarketRepository) GetByExternalID(ctx context.Context, externalID, source string) (*domain.Market, error) {
+	var market domain.Market
+
+	query := `SELECT id, title, description, outcomes, status, category,
+	                 deadline, resolved_outcome, evidence_url, created_by,
+	                 external_id, external_source, created_at, updated_at
+			  FROM markets
+			  WHERE external_id = $1 AND external_source = $2`
+
+	err := r.db.GetContext(ctx, &market, query, externalID, source)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get market by external ID: %w", err)
+	}
+
+	return &market, nil
+}
+
+// ListByExternalSource возвращает все активные рынки с указанным внешним источником.
+func (r *MarketRepository) ListByExternalSource(ctx context.Context, source string) ([]domain.Market, error) {
+	var markets []domain.Market
+
+	query := `SELECT id, title, description, outcomes, status, category,
+	                 deadline, resolved_outcome, evidence_url, created_by,
+	                 external_id, external_source, created_at, updated_at
+			  FROM markets
+			  WHERE external_source = $1 AND status = 'ACTIVE'
+			  ORDER BY created_at DESC`
+
+	if err := r.db.SelectContext(ctx, &markets, query, source); err != nil {
+		return nil, fmt.Errorf("failed to list markets by source: %w", err)
+	}
+
+	return markets, nil
 }

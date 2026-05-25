@@ -37,7 +37,9 @@ type UserRepository interface {
 type MarketRepository interface {
 	Create(ctx context.Context, market *domain.Market) error
 	GetByID(ctx context.Context, id string) (*domain.Market, error)
+	GetByExternalID(ctx context.Context, externalID, source string) (*domain.Market, error)
 	List(ctx context.Context, filter domain.MarketFilter) ([]domain.Market, int, error)
+	ListByExternalSource(ctx context.Context, source string) ([]domain.Market, error)
 	Update(ctx context.Context, market *domain.Market) error
 }
 
