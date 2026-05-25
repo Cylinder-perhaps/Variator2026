@@ -54,9 +54,34 @@ func (s *PositionService) GetPositions(ctx context.Context, userID string) (*Pos
 			continue
 		}
 
-		currentPrice := 1.0 / float64(len(market.Outcomes))
-		currentValue := currentPrice * pos.Quantity
 		invested := pos.AvgCost * pos.Quantity
+		var currentValue float64
+
+		if market.Status == domain.MarketStatusResolved {
+			pools, err := s.positions.GetPoolsByMarketID(ctx, market.ID)
+			if err == nil {
+				totalPool := 0.0
+				winningPool := 0.0
+				for out, p := range pools {
+					totalPool += p
+					if market.ResolvedOutcome != nil && out == *market.ResolvedOutcome {
+						winningPool += p
+					}
+				}
+
+				if winningPool == 0 {
+					currentValue = invested // Refund
+				} else if market.ResolvedOutcome != nil && pos.Outcome == *market.ResolvedOutcome {
+					currentValue = (invested / winningPool) * totalPool
+				} else {
+					currentValue = 0
+				}
+			}
+		} else {
+			currentPrice := 1.0 / float64(len(market.Outcomes))
+			currentValue = currentPrice * pos.Quantity
+		}
+
 		pnl := currentValue - invested
 
 		result.Items = append(result.Items, PositionItem{
