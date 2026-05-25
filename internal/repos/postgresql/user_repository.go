@@ -117,3 +117,54 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// UpdateRole обновляет только роль пользователя.
+func (r *UserRepository) UpdateRole(ctx context.Context, id string, role domain.UserRole) error {
+	query := `UPDATE users SET role = $1 WHERE id = $2`
+
+	result, err := r.db.ExecContext(ctx, query, string(role), id)
+	if err != nil {
+		return fmt.Errorf("failed to update user role: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return domain.ErrNotFound
+	}
+
+	return nil
+}
+
+// ListAll возвращает список пользователей с пагинацией и общее количество.
+func (r *UserRepository) ListAll(ctx context.Context, page, limit int) ([]domain.User, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	countQuery := `SELECT COUNT(*) FROM users`
+	if err := r.db.GetContext(ctx, &total, countQuery); err != nil {
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	var users []domain.User
+	query := `
+		SELECT id, email, password_hash, role, created_at, updated_at
+		FROM users
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	if err := r.db.SelectContext(ctx, &users, query, limit, offset); err != nil {
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+
+	return users, total, nil
+}

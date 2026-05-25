@@ -67,8 +67,8 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*Au
 		ID:           uuid.New().String(),
 		Email:        email,
 		PasswordHash: string(hash),
-		Role:         domain.RoleAdmin,
-		// Role: 	   domain.RoleUser, // TODO: по умолчанию всем юзерам роль "user", админов нужно создавать вручную через БД или отдельный эндпоинт
+		Role:         domain.RoleUser,
+		// Role: 	   domain.RoleAdmin, // TODO: по умолчанию всем юзерам роль "user", админов нужно создавать вручную через БД или отдельный эндпоинт
 	}
 
 	if err := s.users.Create(ctx, user); err != nil {

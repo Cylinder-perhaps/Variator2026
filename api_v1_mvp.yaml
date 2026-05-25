@@ -532,6 +532,26 @@ components:
           type: string
           format: date-time
 
+    UpdateUserRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [user, moderator]
+          description: Новая роль пользователя
+          example: "moderator"
+
+    UsersResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
 paths:
   # ==================== 1. AUTH: REGISTER ====================
   /api/auth/register:
@@ -1287,6 +1307,103 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         503:
           description: Сервис временно недоступен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 15. ADMIN: LIST USERS ====================
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      operationId: listUsers
+      summary: Получить список пользователей (только Admin)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        200:
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: Недостаточно прав (только Admin)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== 16. ADMIN: UPDATE USER ROLE ====================
+  /api/admin/users/{userId}/role:
+    patch:
+      tags: [Admin]
+      operationId: updateUserRole
+      summary: Изменить роль пользователя (только Admin)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRoleRequest"
+      responses:
+        204:
+          description: Роль успешно обновлена
+        400:
+          description: Неверный формат UUID или недопустимая роль
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: Не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: Недостаточно прав или попытка изменить роль другому админу/самому себе
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: Пользователь не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        500:
+          description: Внутренняя ошибка
           content:
             application/json:
               schema:

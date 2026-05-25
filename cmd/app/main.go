@@ -64,6 +64,7 @@ func main() {
 	balanceService := services.NewBalanceService(storage.Balances)
 	positionService := services.NewPositionService(storage.Positions, storage.Markets)
 	tradeService := services.NewTradeService(storage.Trades, storage.Markets)
+	userService := services.NewUserService(storage.Users)
 
 	// --- Инициализация handler ---
 	appHandler := &handler.App{
@@ -73,6 +74,7 @@ func main() {
 		Balances:  balanceService,
 		Positions: positionService,
 		Trades:    tradeService,
+		Users:     userService,
 	}
 
 	// --- Роутер ---
@@ -142,16 +144,32 @@ func main() {
 
 		// Admin-only маршруты.
 		r.Route("/api/admin", func(r chi.Router) {
-			r.Use(mw.RequireRole("admin", "moderator"))
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireRole("admin", "moderator"))
 
-			r.Post("/markets", appHandler.CreateMarket)
-			r.Post("/markets/{marketId}/resolve", func(w http.ResponseWriter, req *http.Request) {
-				marketID, err := parseUUIDParam(req, "marketId")
-				if err != nil {
-					writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Неверный формат UUID")
-					return
-				}
-				appHandler.ResolveMarket(w, req, marketID)
+				r.Post("/markets", appHandler.CreateMarket)
+				r.Post("/markets/{marketId}/resolve", func(w http.ResponseWriter, req *http.Request) {
+					marketID, err := parseUUIDParam(req, "marketId")
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Неверный формат UUID")
+						return
+					}
+					appHandler.ResolveMarket(w, req, marketID)
+				})
+			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RequireRole("admin"))
+
+				r.Get("/users", appHandler.ListUsers)
+				r.Patch("/users/{userId}/role", func(w http.ResponseWriter, req *http.Request) {
+					userID, err := parseUUIDParam(req, "userId")
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "Неверный формат UUID")
+						return
+					}
+					appHandler.UpdateUserRole(w, req, userID)
+				})
 			})
 		})
 	})

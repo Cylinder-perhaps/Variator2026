@@ -25,6 +25,7 @@ type App struct {
 	Balances  *services.BalanceService
 	Positions *services.PositionService
 	Trades    *services.TradeService
+	Users     *services.UserService
 }
 
 // --- Helpers ---
@@ -615,6 +616,85 @@ func (h *App) ResolveMarket(w http.ResponseWriter, r *http.Request, marketId ope
 		TotalPayout:    &payout,
 		ResolvedAt:     &resolvedAt,
 	})
+}
+
+// --- 15. Admin: List Users ---
+
+func (h *App) ListUsers(w http.ResponseWriter, r *http.Request) {
+	// Доступ: только admin (role middleware checks this)
+	
+	page := 1
+	limit := 20
+
+	if v := r.URL.Query().Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			page = n
+		}
+	}
+	if v := r.URL.Query().Get("per_page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+
+	result, err := h.Users.ListUsers(r.Context(), page, limit)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, api.INTERNALERROR, "Внутренняя ошибка сервера")
+		return
+	}
+
+	apiUsers := make([]api.User, 0, len(result.Items))
+	for _, u := range result.Items {
+		uid := openapi_types.UUID{}
+		uid.UnmarshalText([]byte(u.ID))
+
+		apiUsers = append(apiUsers, api.User{
+			Id:        uid,
+			Email:     openapi_types.Email(u.Email),
+			Role:      api.UserRole(u.Role),
+			CreatedAt: u.CreatedAt,
+		})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"data": apiUsers,
+		"meta": paginationMeta(result.Total, page, limit),
+	})
+}
+
+// --- 16. Admin: Update User Role ---
+
+func (h *App) UpdateUserRole(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID) {
+	adminID := mw.GetUserID(r.Context())
+	if adminID == "" {
+		respondError(w, http.StatusUnauthorized, api.UNAUTHORIZED, "Не авторизован")
+		return
+	}
+
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, "Неверный формат запроса")
+		return
+	}
+
+	err := h.Users.UpdateUserRole(r.Context(), adminID, userId.String(), domain.UserRole(req.Role))
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			respondError(w, http.StatusNotFound, api.NOTFOUND, "Пользователь не найден")
+		case errors.Is(err, domain.ErrForbidden):
+			respondError(w, http.StatusForbidden, api.FORBIDDEN, err.Error())
+		case errors.Is(err, domain.ErrInvalidRequest):
+			respondError(w, http.StatusBadRequest, api.INVALIDREQUEST, err.Error())
+		default:
+			respondError(w, http.StatusInternalServerError, api.INTERNALERROR, "Внутренняя ошибка сервера")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Converters ---
