@@ -72,17 +72,18 @@ func (s *MarketService) ListMarkets(ctx context.Context, status *string, sortBy 
 }
 
 // GetMarketDetails возвращает детали рынка по ID.
-	market, err := s.markets.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+func (s *MarketService) GetMarketDetails(ctx context.Context, id string) (*domain.Market, error) {
+    market, err := s.markets.GetByID(ctx, id)
+    if err != nil {
+        return nil, err
+    }
 
-	pools, err := s.positions.GetPoolsByMarketID(ctx, market.ID)
-	if err == nil && len(pools) > 0 {
-		market.Pools = pools
-	}
+    pools, err := s.positions.GetPoolsByMarketID(ctx, market.ID)
+    if err == nil && len(pools) > 0 {
+        market.Pools = pools
+    }
 
-	return market, nil
+    return market, nil
 }
 
 // CreateMarket создаёт новый рынок (только admin).
